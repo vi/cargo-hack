@@ -104,6 +104,12 @@ pub(crate) struct Args {
 
     /// --randomize-powerset
     pub(crate) randomize_powerset: Option<u64>,
+
+    /// --powerset-skip-first
+    pub(crate) powerset_skip_first: Option<usize>,
+
+    /// --powerset-num-tests
+    pub(crate) powerset_num_tests: Option<usize>,
 }
 
 impl Args {
@@ -181,6 +187,9 @@ impl Args {
         let mut exclude_all_features = false;
 
         let mut randomize_powerset = None;
+
+        let mut powerset_skip_first = None;
+        let mut powerset_num_tests = None;
 
         let mut group_features: Vec<String> = vec![];
         let mut mutually_exclusive_features: Vec<String> = vec![];
@@ -314,6 +323,8 @@ impl Args {
                 Long("ignore-private") => parse_flag!(ignore_private),
                 Long("exclude-no-default-features") => parse_flag!(exclude_no_default_features),
                 Long("exclude-all-features") => parse_flag!(exclude_all_features),
+                Long("powerset-skip-first") => parse_opt!(powerset_skip_first, false),
+                Long("powerset-num-tests") => parse_opt!(powerset_num_tests, false),
                 Long("include-deps-features") => parse_flag!(include_deps_features),
                 Long("clean-per-run") => parse_flag!(clean_per_run),
                 Long("clean-per-version") => parse_flag!(clean_per_version),
@@ -604,6 +615,9 @@ impl Args {
             || !mutually_exclusive_features.is_empty();
         exclude_features.extend_from_slice(&features);
 
+        let powerset_skip_first = powerset_skip_first.as_deref().map(str::parse).transpose()?;
+        let powerset_num_tests = powerset_num_tests.as_deref().map(str::parse).transpose()?;
+
         term::verbose::set(verbose != 0);
         // If `-vv` is passed, propagate `-v` to cargo.
         if verbose > 1 {
@@ -649,6 +663,9 @@ impl Args {
             exclude_features,
             exclude_no_default_features,
             exclude_all_features,
+
+            powerset_skip_first,
+            powerset_num_tests,
 
             features,
 
@@ -710,6 +727,12 @@ const HELP: &[HelpText<'_>] = &[
     ("", "--randomize-powerset", "<seed>", "Randomize order of powerset elements.", &[
         "Run feature powerset in random order with the specified seed.",
         "Zero seed value means unseeded."
+    ]),
+    ("", "--powerset-skip-first", "<NUM>", "Skip specified number of initial powerset elements", &[
+        "This allows to resume interrupted large powerset runs of parallelize them using CARGO_TARGET_DIR.",
+    ]),
+    ("", "--powerset-num-tests", "<NUM>", "Limit --feature-powerset run to specified number of trials", &[
+        "You can resume the run using --powerset-skip-first option.",
     ]),
     ("", "--optional-deps", "[DEPS]...", "Use optional dependencies as features", &[
         "If DEPS are not specified, all optional dependencies are considered as features.",

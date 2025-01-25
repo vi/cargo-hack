@@ -84,6 +84,17 @@ OPTIONS:
 
             Zero seed value means unseeded.
 
+        --powerset-skip-first <NUM>
+            Skip specified number of initial powerset elements.
+
+            This allows to resume interrupted large powerset runs of parallelize them using
+            CARGO_TARGET_DIR.
+
+        --powerset-num-tests <NUM>
+            Limit --feature-powerset run to specified number of trials.
+
+            You can resume the run using --powerset-skip-first option.
+
         --optional-deps [DEPS]...
             Use optional dependencies as features.
 
