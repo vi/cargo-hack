@@ -211,6 +211,8 @@ pub(crate) fn feature_powerset<'a>(
     mutually_exclusive_features: &[Feature],
     package_features: &BTreeMap<String, Vec<String>>,
     randomize: Option<u64>,
+    skip_first: Option<usize>,
+    num_tests: Option<usize>,
 ) -> Vec<Vec<&'a Feature>> {
     let deps_map = feature_deps(package_features);
     let at_least_one_of = at_least_one_of_for_package(at_least_one_of, &deps_map);
@@ -256,6 +258,19 @@ pub(crate) fn feature_powerset<'a>(
             fastrand::seed(seed);
         }
         fastrand::shuffle(&mut result);
+    }
+    if let Some(mut skip_first) = skip_first {
+        result.retain(|_| {
+            if skip_first == 0 {
+                true
+            } else {
+                skip_first -= 1;
+                false
+            }
+        });
+    }
+    if let Some(num_tests) = num_tests {
+        result.resize_with(num_tests.min(result.len()), || unreachable!());
     }
     result
 }
@@ -374,22 +389,32 @@ mod tests {
         let map = map![("a", v![]), ("b", v!["a"]), ("c", v!["b"]), ("d", v!["a", "b"])];
 
         let list = v!["a", "b", "c", "d"];
-        let filtered = feature_powerset(&list, None, &[], &[], &map, None);
+        let filtered = feature_powerset(&list, None, &[], &[], &map, None, None, None);
         assert_eq!(filtered, vec![vec!["a"], vec!["b"], vec!["c"], vec!["d"], vec!["c", "d"]]);
 
-        let filtered = feature_powerset(&list, None, &["a".into()], &[], &map, None);
+        let filtered = feature_powerset(&list, None, &["a".into()], &[], &map, None, None, None);
         assert_eq!(filtered, vec![vec!["a"], vec!["b"], vec!["c"], vec!["d"], vec!["c", "d"]]);
 
-        let filtered = feature_powerset(&list, None, &["c".into()], &[], &map, None);
+        let filtered = feature_powerset(&list, None, &["c".into()], &[], &map, None, None, None);
         assert_eq!(filtered, vec![vec!["c"], vec!["c", "d"]]);
 
-        let filtered = feature_powerset(&list, None, &["a".into(), "c".into()], &[], &map, None);
+        let filtered =
+            feature_powerset(&list, None, &["a".into(), "c".into()], &[], &map, None, None, None);
         assert_eq!(filtered, vec![vec!["c"], vec!["c", "d"]]);
 
         let map = map![("tokio", v![]), ("async-std", v![]), ("a", v![]), ("b", v!["a"])];
         let list = v!["a", "b", "tokio", "async-std"];
         let mutually_exclusive_features = [Feature::group(["tokio", "async-std"])];
-        let filtered = feature_powerset(&list, None, &[], &mutually_exclusive_features, &map, None);
+        let filtered = feature_powerset(
+            &list,
+            None,
+            &[],
+            &mutually_exclusive_features,
+            &map,
+            None,
+            None,
+            None,
+        );
         assert_eq!(filtered, vec![
             vec!["a"],
             vec!["b"],
@@ -403,7 +428,16 @@ mod tests {
 
         let mutually_exclusive_features =
             [Feature::group(["tokio", "a"]), Feature::group(["tokio", "async-std"])];
-        let filtered = feature_powerset(&list, None, &[], &mutually_exclusive_features, &map, None);
+        let filtered = feature_powerset(
+            &list,
+            None,
+            &[],
+            &mutually_exclusive_features,
+            &map,
+            None,
+            None,
+            None,
+        );
         assert_eq!(filtered, vec![
             vec!["a"],
             vec!["b"],
@@ -421,7 +455,16 @@ mod tests {
         ];
         let list = v!["a", "b", "tokio", "async-std"];
         let mutually_exclusive_features = [Feature::group(["tokio", "async-std"])];
-        let filtered = feature_powerset(&list, None, &[], &mutually_exclusive_features, &map, None);
+        let filtered = feature_powerset(
+            &list,
+            None,
+            &[],
+            &mutually_exclusive_features,
+            &map,
+            None,
+            None,
+            None,
+        );
         assert_eq!(filtered, vec![
             vec!["a"],
             vec!["b"],
@@ -435,7 +478,16 @@ mod tests {
         let map = map![("a", v![]), ("b", v!["a"]), ("c", v![]), ("d", v!["b"])];
         let list = v!["a", "b", "c", "d"];
         let mutually_exclusive_features = [Feature::group(["a", "c"])];
-        let filtered = feature_powerset(&list, None, &[], &mutually_exclusive_features, &map, None);
+        let filtered = feature_powerset(
+            &list,
+            None,
+            &[],
+            &mutually_exclusive_features,
+            &map,
+            None,
+            None,
+            None,
+        );
         assert_eq!(filtered, vec![vec!["a"], vec!["b"], vec!["c"], vec!["d"]]);
     }
 
@@ -469,8 +521,45 @@ mod tests {
             vec!["b", "c", "d"],
             vec!["a", "b", "c", "d"],
         ]);
-        let filtered = feature_powerset(&list, None, &[], &[], &map, None);
+        let filtered = feature_powerset(&list, None, &[], &[], &map, None, None, None);
         assert_eq!(filtered, vec![vec!["a"], vec!["b"], vec!["c"], vec!["d"], vec!["c", "d"]]);
+    }
+    #[test]
+    fn powerset_paging() {
+        let map = map![("a", v![]), ("b", v!["a"]), ("c", v!["b"]), ("d", v!["a", "b"])];
+        let list: Vec<Feature> = v!["a", "b", "c", "d", "e"];
+        let filtered = feature_powerset(&list, None, &[], &[], &map, None, None, None);
+        assert_eq!(filtered, vec![
+            vec!["a"],
+            vec!["b"],
+            vec!["c"],
+            vec!["d"],
+            vec!["c", "d"],
+            vec!["e"],
+            vec!["a", "e"],
+            vec!["b", "e"],
+            vec!["c", "e"],
+            vec!["d", "e"],
+            vec!["c", "d", "e"]
+        ]);
+
+        let filtered = feature_powerset(&list, None, &[], &[], &map, None, None, Some(0));
+        assert!(filtered.is_empty());
+
+        let filtered = feature_powerset(&list, None, &[], &[], &map, None, None, Some(4));
+        assert_eq!(filtered, vec![vec!["a"], vec!["b"], vec!["c"], vec!["d"],]);
+
+        let filtered = feature_powerset(&list, None, &[], &[], &map, None, Some(0), Some(4));
+        assert_eq!(filtered, vec![vec!["a"], vec!["b"], vec!["c"], vec!["d"],]);
+
+        let filtered = feature_powerset(&list, None, &[], &[], &map, None, Some(4), Some(4));
+        assert_eq!(filtered, vec![vec!["c", "d"], vec!["e"], vec!["a", "e"], vec!["b", "e"],]);
+
+        let filtered = feature_powerset(&list, None, &[], &[], &map, None, Some(8), Some(4));
+        assert_eq!(filtered, vec![vec!["c", "e"], vec!["d", "e"], vec!["c", "d", "e"]]);
+
+        let filtered = feature_powerset(&list, None, &[], &[], &map, None, Some(8), None);
+        assert_eq!(filtered, vec![vec!["c", "e"], vec!["d", "e"], vec!["c", "d", "e"]]);
     }
 
     #[test]

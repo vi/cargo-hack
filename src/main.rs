@@ -290,6 +290,8 @@ fn determine_kind<'a>(
             &cx.mutually_exclusive_features,
             &package.features,
             cx.randomize_powerset,
+            cx.powerset_skip_first,
+            cx.powerset_num_tests,
         );
 
         if (pkg_features.normal().is_empty() && pkg_features.optional_deps().is_empty()
